@@ -1,2 +1,3 @@
 combined_faces/
 knn_model.pkl
+train_df.csv

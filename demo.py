@@ -8,11 +8,19 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 import pickle
 from skimage.feature import hog
+import matplotlib.pyplot as plt
+import pandas as pd
+import io
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from PIL import Image
+
 
 with open("utils/knn_model.pkl", 'rb') as file:
     knn_loaded = pickle.load(file)
 
 detector = cv2.CascadeClassifier("utils/haarcascade_frontalface_default.xml")
+
+train_df = pd.read_csv("utils/train_df.csv")
 
 
 N = 6480
@@ -22,12 +30,14 @@ cells_per_block = (4, 4)
 
 
 LIST_FACES = []
+LIST_EMB_FACES = {}
+
 
 def inference_choose_face(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
     rects = detector.detectMultiScale(gray, scaleFactor=1.05,
-    minNeighbors=15, minSize=(50, 50),
+    minNeighbors=7, minSize=(50, 50),
     flags=cv2.CASCADE_SCALE_IMAGE)
 
     # loop over the bounding boxes
@@ -39,6 +49,9 @@ def inference_choose_face(img):
 
     global RECTS
     RECTS = rects
+
+    global LIST_EMB_FACES
+    LIST_EMB_FACES = {}
 
     i = 0
 
@@ -72,6 +85,7 @@ def inference_predict_age(img, face_nums):
         face_image = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
         face_image_gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
         fd = hog(face_image_gray, orientations=orientations, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block, block_norm='L2', visualize=False, transform_sqrt=True)
+        LIST_EMB_FACES[index] = fd
         predict = knn_loaded.predict([fd])
         predict = predict[0]
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -80,11 +94,47 @@ def inference_predict_age(img, face_nums):
     return image, gr.Dropdown.update(choices=[str(i) for i in face_nums])
 
 
-def inference_see_detail(img, see_detail):
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+def inference_see_detail(img_org, see_detail):
     print("inference_see_detail")
     print(see_detail)
+    print(LIST_EMB_FACES)
+
+    fd = LIST_EMB_FACES[int(see_detail)]
+
+    # img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+    distances, indices = knn_loaded.kneighbors([fd], return_distance = True)
+
+    if len(indices) > 0:
+        distances = distances[0]
+        indices = indices[0]
+
+    # Plot the nearest neighbors
+    fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
+
+    i = 0
+    for indice, distance in zip(indices, distances):
+        path_img = "utils/combined_faces/" + train_df.iloc[indice]["filename"]
+        print(path_img)
+        img = cv2.imread(path_img)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        axs[i].imshow(img)
+        axs[i].set_title(f"age: {train_df.iloc[indice]['age']}, distance: {distance}\n{train_df.iloc[indice]['filename']}")
+        i+=1
+
+    # Convert figure to PIL image
+    canvas = FigureCanvas(fig)
+    buf = io.BytesIO()
+    canvas.print_png(buf)
+    buf.seek(0)
+    img = Image.open(buf)
+
     return img
+
+    return fig
+
+# save df to csv
+# train_df.to_csv("train_df.csv", index=False)
 
 
 demo = gr.Blocks()
