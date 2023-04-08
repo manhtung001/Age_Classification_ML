@@ -248,7 +248,13 @@ def inference_predict_age_2(img, face_nums):
     return image, gr.Dropdown.update(choices=[str(i) for i in face_nums])
 
 
-def inference_see_detail(img_org, see_detail):
+def inference_see_detail(img_org, see_detail, option_age_predict):
+    
+    if img_org is None:
+        raise gr.Error("Please upload an image first!")
+    if option_age_predict == "via_DL":
+        raise gr.Error("via_DL not support this function!")
+    
     print("inference_see_detail")
     print(see_detail)
     print(LIST_EMB_FACES)
@@ -285,33 +291,48 @@ def inference_see_detail(img_org, see_detail):
 
     return img
 
-# save df to csv
-# train_df.to_csv("train_df.csv", index=False)
-
-# def update_option_to_detect_face(value):
-#     global OPTION_DETECT_FACES
-#     OPTION_DETECT_FACES = value
-#     print("update_option_to_detect_face")
-#     print(value)
-
 demo = gr.Blocks()
 
 options = []
+
+def handle_choose_option_face_detect(img_input, option_detect_face):
+    
+    if img_input is None:
+        raise gr.Error("Please upload an image first!")
+    
+    if option_detect_face == "via_haar":
+        print("via_haar")
+        return inference_choose_face_1(img_input)
+    elif option_detect_face == "via_resnet":
+        print("via_resnet")
+        return inference_choose_face_2(img_input)
+    
+
+def handle_choose_option_face_predict(img_input, face_nums, option_age_predict):
+    
+    if img_input is None:
+        raise gr.Error("Please upload an image first!")
+    
+    if option_age_predict == "via_ML":
+        print("via_ML")
+        return inference_predict_age_1(img_input, face_nums)
+    elif option_age_predict == "via_DL":
+        print("via_DL")
+        return inference_predict_age_2(img_input, face_nums)
+
 
 
 with demo:
     img_input = gr.Image(label='input')
 
-    # option_to_detect_face = gr.Dropdown(
-    #         choices=['via haar', 'via yolo'], label="option_to_detect_face", info="option_to_detect_face"
-    #     )
-    # option_to_detect_face.change(update_option_to_detect_face, inputs=[option_to_detect_face])
-
+    option_detect_face = gr.Radio(["via_haar", "via_resnet"], label="kind_detect", info="Kind detect face", value="via_haar")
     
     b1 = gr.Button("detect all faces")
 
     img_input_1 = gr.Image(label='face prediction')
     face_nums = gr.Dropdown([], value=[], multiselect=True)
+    
+    option_age_predict = gr.Radio(["via_ML", "via_DL"], label="kind_predict", info="Kind predict face", value="via_ML")
     
     b2 = gr.Button("predict age")
     
@@ -323,9 +344,12 @@ with demo:
 
     img_detail = gr.Image(label='img_detail')
 
-    # b1.click(inference_choose_face_1, inputs=[img_input], outputs=[img_input_1, face_nums])
-    b1.click(inference_choose_face_2, inputs=[img_input], outputs=[img_input_1, face_nums])
-    b2.click(inference_predict_age_2, inputs=[img_input, face_nums], outputs=[img_predict, see_detail_option])
-    b3.click(inference_see_detail, inputs=[img_input, see_detail_option], outputs=img_detail)
+    b1.click(handle_choose_option_face_detect, inputs=[img_input, option_detect_face], outputs=[img_input_1, face_nums])
+    b2.click(handle_choose_option_face_predict, inputs=[img_input, face_nums, option_age_predict], outputs=[img_predict, see_detail_option])
+    b3.click(inference_see_detail, inputs=[img_input, see_detail_option, option_age_predict], outputs=img_detail)
 
 demo.launch(debug=True)
+
+
+
+
