@@ -24,10 +24,12 @@ face_detect_model = 'utils/res10_300x300_ssd_iter_140000.caffemodel'
 face_detect_net = cv2.dnn.readNetFromCaffe(face_detect_prototxt, face_detect_model)
 
 
-train_sampled_df = pd.read_csv("utils/HOG/train_sampled_df.csv")
-train_sampled_df = train_sampled_df.values.tolist()
+with open("utils/knn_model.pkl", 'rb') as file:
+    knn_loaded = pickle.load(file)
 
 detector = cv2.CascadeClassifier("utils/haarcascade_frontalface_default.xml")
+
+train_df = pd.read_csv("utils/train_df.csv")
 
 
 # Defining the architecture of the sequential neural network.
@@ -89,22 +91,7 @@ OPTION_DETECT_FACES = ''
 #     return final_cnn_pred[0]
 
 
-def convert_label_show(label):
-    label = int(label)
-    if label == 0:
-        return '0-19'
-    if label == 1:
-        return '20-45'
-    if label == 2:
-        return '>45'
-    return 'None'
-    
-
-
 def inference_choose_face_1(img):
-    
-    global USE_ORIGIN
-    USE_ORIGIN = False
 
     print("inference_choose_face_1")
     print(OPTION_DETECT_FACES)
@@ -147,9 +134,6 @@ def inference_choose_face_1(img):
 
 
 def inference_choose_face_2(img):
-    
-    global USE_ORIGIN
-    USE_ORIGIN = False
 
     # convert to RGB
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -245,46 +229,11 @@ def inference_choose_face_3(img):
     global USE_ORIGIN
     USE_ORIGIN = True
 
-    return face_image, num_boxes
+    return image, num_boxes
 
-
-# Example of making predictions
-from math import sqrt
-
-# calculate the Euclidean distance between two vectors
-def euclidean_distance(row1, row2):
-	distance = 0.0
-	for i in range(len(row1)-1):
-		distance += (row1[i] - row2[i])**2
-	return sqrt(distance)
-
-# Locate the most similar neighbors
-def get_neighbors(train, test_row, num_neighbors):
-    distances = list()
-    for train_row in train:
-        dist = euclidean_distance(train_row[:-3], test_row)
-        distances.append((train_row, dist))
-    distances.sort(key=lambda tup: tup[1])
-    neighbors = list()
-    for i in range(num_neighbors):
-        neighbors.append(distances[i])
-    return neighbors
-
-# Make a classification prediction with neighbors
-def predict_classification(train, test_row, num_neighbors):
-	neighbors = get_neighbors(train, test_row, num_neighbors)
-	output_values = [row[0][-2] for row in neighbors]
-	prediction = max(set(output_values), key=output_values.count)
-	neighbors = [(row[0][-3], row[0][-2], row[0][-1], row[1]) for row in neighbors]
-	return prediction, neighbors
 
 
 def inference_predict_age_1(img, face_nums):
-    
-    if USE_ORIGIN:
-        # resize image
-        img = cv2.resize(img, (200, 200))
-        
 
     print("inference_predict_age_1")
     print(face_nums)
@@ -298,27 +247,20 @@ def inference_predict_age_1(img, face_nums):
         face_image = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
         face_image_gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
         fd = hog(face_image_gray, orientations=orientations, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block, block_norm='L2', visualize=False, transform_sqrt=True)
-        
-        predict, neighbors = predict_classification(train_sampled_df, fd, 3)
-        predict -= 1
-        
-        LIST_EMB_FACES[index] = neighbors
-        
+        LIST_EMB_FACES[index] = fd
+        predict = knn_loaded.predict([fd])
+        predict = predict[0]
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
         # print("USE_ORIGIN: ", USE_ORIGIN)
         if USE_ORIGIN:
-            cv2.putText(image, "#{}-pred: {}".format(index, convert_label_show(predict)), (x + 20, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
+            cv2.putText(image, "#{}-pred: {}".format(index, predict), (x + 20, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
         else:
-            cv2.putText(image, "#{}-pred: {}".format(index, convert_label_show(predict)), (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(image, "#{}-pred: {}".format(index, predict), (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     
     return image, gr.Dropdown.update(choices=[str(i) for i in face_nums])
 
 
 def inference_predict_age_2(img, face_nums):
-    
-    if USE_ORIGIN:
-        # resize image
-        img = cv2.resize(img, (200, 200))
     
     print("inference_predict_age_2")
     print(face_nums)
@@ -339,12 +281,18 @@ def inference_predict_age_2(img, face_nums):
         final_cnn_pred = final_age_cnn.predict(face_image)
         predict = final_cnn_pred.argmax(axis=-1)
         predict = predict[0]
+        # if 0 <= predict <= 2:
+        #     predict = 0
+        # elif 3 <= predict <= 4:
+        #     predict = 1
+        # else:
+        #     predict = 2
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
         # print("USE_ORIGIN: ", USE_ORIGIN)
         if USE_ORIGIN:
-            cv2.putText(image, "#{}-pred: {}".format(index, convert_label_show(predict)), (x + 20, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
+            cv2.putText(image, "#{}-pred: {}".format(index, predict), (x + 20, y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
         else:
-            cv2.putText(image, "#{}-pred: {}".format(index, convert_label_show(predict)), (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(image, "#{}-pred: {}".format(index, predict), (x - 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
     
     return image, gr.Dropdown.update(choices=[str(i) for i in face_nums])
@@ -354,27 +302,36 @@ def inference_see_detail(img_org, see_detail, option_age_predict):
     
     if img_org is None:
         raise gr.Error("Please upload an image first!")
-    if option_age_predict == "CNN":
-        raise gr.Error("CNN not support this function!")
+    if option_age_predict == "via_DL":
+        raise gr.Error("via_DL not support this function!")
     
     print("inference_see_detail")
     print(see_detail)
     print(LIST_EMB_FACES)
 
-    neighbors = LIST_EMB_FACES[int(see_detail)]
-   
+    fd = LIST_EMB_FACES[int(see_detail)]
+    
+    
+
+    # img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+    distances, indices = knn_loaded.kneighbors([fd], return_distance = True)
+
+    if len(indices) > 0:
+        distances = distances[0]
+        indices = indices[0]
 
     # Plot the nearest neighbors
     fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
 
     i = 0
-    for indice in range(len(neighbors)):
-        path_img = "utils/combined_faces/" + neighbors[indice][2]
+    for indice, distance in zip(indices, distances):
+        path_img = "utils/combined_faces/" + train_df.iloc[indice]["filename"]
         print(path_img)
         img = cv2.imread(path_img)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         axs[i].imshow(img)
-        axs[i].set_title(f"age: {neighbors[indice][0]}, distance: {neighbors[indice][3]}\n{neighbors[indice][2]}")
+        axs[i].set_title(f"age: {train_df.iloc[indice]['age']}, distance: {distance}\n{train_df.iloc[indice]['filename']}")
         i+=1
 
     # Convert figure to PIL image
@@ -395,13 +352,13 @@ def handle_choose_option_face_detect(img_input, option_detect_face):
     if img_input is None:
         raise gr.Error("Please upload an image first!")
     
-    if option_detect_face == "Haar Cascade":
-        print("Haar Cascade")
+    if option_detect_face == "via_haar":
+        print("via_haar")
         return inference_choose_face_1(img_input)
-    elif option_detect_face == "SSD":
-        print("SSD")
+    elif option_detect_face == "via_resnet":
+        print("via_resnet")
         return inference_choose_face_2(img_input)
-    elif option_detect_face == "Origin":
+    elif option_detect_face == "use_origin":
         print("use origin")
         return inference_choose_face_3(img_input)
     
@@ -411,11 +368,11 @@ def handle_choose_option_face_predict(img_input, face_nums, option_age_predict):
     if img_input is None:
         raise gr.Error("Please upload an image first!")
     
-    if option_age_predict == "KNN":
-        print("KNN")
+    if option_age_predict == "via_ML":
+        print("via_ML")
         return inference_predict_age_1(img_input, face_nums)
-    elif option_age_predict == "CNN":
-        print("CNN")
+    elif option_age_predict == "via_DL":
+        print("via_DL")
         return inference_predict_age_2(img_input, face_nums)
 
 
@@ -423,22 +380,22 @@ def handle_choose_option_face_predict(img_input, face_nums, option_age_predict):
 with demo:
     img_input = gr.Image(label='input')
 
-    option_detect_face = gr.Radio(["Haar Cascade", "SSD", "Origin"], label="kind_detect", info="Kind detect face", value="Haar Cascade")
+    option_detect_face = gr.Radio(["via_haar", "via_resnet", "use_origin"], label="kind_detect", info="Kind detect face", value="via_haar")
     
     b1 = gr.Button("detect all faces")
 
     img_input_1 = gr.Image(label='face prediction')
     face_nums = gr.Dropdown([], value=[], multiselect=True)
     
-    option_age_predict = gr.Radio(["KNN", "CNN"], label="kind_predict", info="Kind predict face", value="KNN")
+    option_age_predict = gr.Radio(["via_ML", "via_DL"], label="kind_predict", info="Kind predict face", value="via_ML")
     
     b2 = gr.Button("predict age")
     
     img_predict = gr.Image(label='img face prediction')
 
-    see_detail_option = gr.Dropdown(options, label="(KNN) options to see detail")
+    see_detail_option = gr.Dropdown(options, label="options to see detail")
 
-    b3 = gr.Button("(KNN) see detail")
+    b3 = gr.Button("see detail")
 
     img_detail = gr.Image(label='img_detail')
 
@@ -447,7 +404,6 @@ with demo:
     b3.click(inference_see_detail, inputs=[img_input, see_detail_option, option_age_predict], outputs=img_detail)
 
 demo.launch(debug=True)
-# demo.launch()
 
 
 
