@@ -272,11 +272,16 @@ def get_neighbors(train, test_row, num_neighbors):
 
 # Make a classification prediction with neighbors
 def predict_classification(train, test_row, num_neighbors):
-	neighbors = get_neighbors(train, test_row, num_neighbors)
-	output_values = [row[0][-2] for row in neighbors]
-	prediction = max(set(output_values), key=output_values.count)
-	neighbors = [(row[0][-3], row[0][-2], row[0][-1], row[1]) for row in neighbors]
-	return prediction, neighbors
+    neighbors = get_neighbors(train, test_row, num_neighbors)
+    output_values = [row[0][-2] for row in neighbors]
+    if len(set(output_values)) == 3:
+        print(" len(set(output_values)) == 3 neighbors")
+        print([(row[0][-3], row[0][-2], row[0][-1], row[1]) for row in neighbors])
+        prediction = neighbors[0][0][-2]
+    else:
+        prediction = max(set(output_values), key=output_values.count)
+    neighbors = [(row[0][-3], row[0][-2], row[0][-1], row[1]) for row in neighbors]
+    return prediction, neighbors
 
 
 def inference_predict_age_1(img, face_nums):
@@ -374,7 +379,7 @@ def inference_see_detail(img_org, see_detail, option_age_predict):
         img = cv2.imread(path_img)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         axs[i].imshow(img)
-        axs[i].set_title(f"age: {neighbors[indice][0]}, distance: {neighbors[indice][3]}\n{neighbors[indice][2]}")
+        axs[i].set_title(f'age: {neighbors[indice][0]}, distance: {round(neighbors[indice][3], 5)}\n{neighbors[indice][2]}')
         i+=1
 
     # Convert figure to PIL image
