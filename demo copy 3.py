@@ -24,7 +24,7 @@ face_detect_model = 'utils/res10_300x300_ssd_iter_140000.caffemodel'
 face_detect_net = cv2.dnn.readNetFromCaffe(face_detect_prototxt, face_detect_model)
 
 
-train_sampled_df = pd.read_csv("utils/df.csv")
+train_sampled_df = pd.read_csv("utils/HOG/train_sampled_df.csv")
 train_sampled_df = train_sampled_df.values.tolist()
 
 detector = cv2.CascadeClassifier("utils/haarcascade_frontalface_default.xml")
@@ -64,6 +64,11 @@ final_age_cnn.load_weights('utils/final_cnn_model_checkpoint.h5')
 # final_age_cnn.load_weights('utils/cnn_model_checkpoint_aug_7.h5')
 # final_age_cnn.load_weights('utils/cnn_model_checkpoint_1.h5')
 # final_age_cnn.load_weights('utils/cnn_model_checkpoint_2.h5')
+
+N = 6480
+orientations = 5
+pixels_per_cell = (16, 16)
+cells_per_block = (4, 4)
 
 
 LIST_FACES = []
@@ -258,8 +263,6 @@ def get_neighbors(train, test_row, num_neighbors):
     distances = list()
     for train_row in train:
         dist = euclidean_distance(train_row[:-3], test_row)
-        # print(train_row[:-3])
-        # dist = euclidean_distance(np.array(train_row[:-3]).astype("float"), np.array(test_row).astype("float"))
         distances.append((train_row, dist))
     distances.sort(key=lambda tup: tup[1])
     neighbors = list()
@@ -269,7 +272,6 @@ def get_neighbors(train, test_row, num_neighbors):
 
 # Make a classification prediction with neighbors
 def predict_classification(train, test_row, num_neighbors):
-    
     neighbors = get_neighbors(train, test_row, num_neighbors)
     output_values = [row[0][-2] for row in neighbors]
     if len(set(output_values)) == 3:
@@ -298,31 +300,12 @@ def inference_predict_age_1(img, face_nums):
 
     for coord, face, index in zip(rects, list_faces, face_nums):
         (x, y, w, h) = coord
-        
-        
-        img_gray = np.dot(face[...,:3], [0.2989, 0.5870, 0.1140]).round().astype(np.uint8)
-        
-        # Số bin
-        bins = 256
-        
-        # Tạo mảng histogram
-        hist = np.zeros(bins, dtype=np.int32)
-        
-        # Duyệt qua từng pixel và đếm số lượng pixel nằm trong từng bin
-        for pixel in img_gray.flatten():
-            hist[pixel] += 1
-
-        # normalize the histogram
-        hist = hist.astype("float")
-        hist /= max(hist)
-        # flatten the histogram and append to dataframe
-        fd = hist.flatten()
-        
-        # face_image = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
-        # face_image_gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
-        # fd = hog(face_image_gray, orientations=orientations, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block, block_norm='L2', visualize=False, transform_sqrt=True)
+        face_image = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
+        face_image_gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
+        fd = hog(face_image_gray, orientations=orientations, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block, block_norm='L2', visualize=False, transform_sqrt=True)
         
         predict, neighbors = predict_classification(train_sampled_df, fd, 3)
+        predict -= 1
         
         LIST_EMB_FACES[index] = neighbors
         
@@ -391,7 +374,7 @@ def inference_see_detail(img_org, see_detail, option_age_predict):
 
     i = 0
     for indice in range(len(neighbors)):
-        path_img = "utils/img_filter/" + neighbors[indice][2]
+        path_img = "utils/combined_faces/" + neighbors[indice][2]
         print(path_img)
         img = cv2.imread(path_img)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
